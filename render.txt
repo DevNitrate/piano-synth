@@ -1,0 +1,42 @@
+
+    let mut segidx: Vec<SegmentIdx> = Vec::new();
+
+    for i in 0..sample_count {
+        let sample: Sample = Sample {
+            idx: i,
+            value: Vec2::new((i as f32)*coef - (string_length * 0.5), (((i as f32) / sample_count as f32) * TAU).sin()*50.0)
+        };
+
+        let seg: SegmentIdx = SegmentIdx {
+            idx: i
+        };
+
+        samples.push(sample); 
+        segidx.push(seg);
+    }
+
+    for i in 0..sample_count {
+        let sample: Sample = samples[i].clone();
+        let x: f32 = sample.value.x;
+        let y: f32 = sample.value.y;
+        let x_next: f32 = if i < (sample_count-1) {samples[i+1].value.x} else {x};
+        let y_next: f32 = if i < (sample_count-1) {samples[i+1].value.y} else {y};
+
+        let x_length: f32 = x_next - x;
+        let y_length: f32 = y_next - y;
+        let length: f32 = (x_length*x_length + y_length*y_length).sqrt();
+
+        commands.spawn((
+                sample,
+                Mesh2d(circle_shape.clone()),
+                Transform::from_xyz(x, y, 0.0),
+                MeshMaterial2d(circle_color.clone())
+        ));
+
+        commands.spawn((
+                segidx[i].clone(),
+                Mesh2d(meshes.add(Rectangle::new(length, 7.0))),
+                MeshMaterial2d(line_color.clone()),
+                Transform::from_xyz((x + x_next) * 0.5, (y + y_next) * 0.5, -1.0).with_rotation(Quat::from_rotation_z((y_length / x_length).atan()))
+        ));
+    }
