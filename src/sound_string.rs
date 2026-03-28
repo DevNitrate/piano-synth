@@ -1,4 +1,6 @@
-use bevy::{asset::{Assets, Handle}, color::Color, ecs::{component::Component, entity::Entity, query::{With, Without}, system::{Commands, Query, ResMut}}, math::{Quat, Vec2, primitives::{Circle, Rectangle}}, mesh::{Mesh, Mesh2d}, sprite_render::{ColorMaterial, MeshMaterial2d}, transform::components::Transform};
+use bevy::{asset::{Assets, Handle}, color::Color, ecs::{component::Component, entity::Entity, query::{With, Without}, system::{Commands, Query, ResMut, Res}}, math::{Quat, Vec2, Vec3, primitives::{Circle, Rectangle}}, mesh::{Mesh, Mesh2d}, sprite_render::{ColorMaterial, MeshMaterial2d}, transform::components::Transform};
+
+use crate::SimulationState;
 
 #[derive(Component, Clone)]
 pub struct SoundString {
@@ -7,6 +9,7 @@ pub struct SoundString {
     pub sample_count: usize,
     pub samples: Vec<f32>,
     pub samples_prev: Vec<f32>,
+    pub samples_next: Vec<f32>,
     // wave speed depending on tension and mass per unit length
     pub c: f32
 }
@@ -23,6 +26,35 @@ pub struct CircleEntity;
 #[derive(Component)]
 pub struct RectangleEntity;
 
+pub fn update_string(query_string: Query<&mut SoundString>, sim_state: Res<SimulationState>) {
+    if !sim_state.0 {
+        return;
+    }
+
+    for mut sound_str in query_string {
+        for _ in 0..800 {
+            for i in 0..sound_str.sample_count {
+                if i == 0 || i == (sound_str.sample_count - 1) {
+                    continue;
+                }
+
+                let sample: f32 = sound_str.samples[i];
+                let sample_next: f32 = sound_str.samples[i+1];
+                let sample_prev: f32 = sound_str.samples[i-1];
+                let sample_old: f32 = sound_str.samples_prev[i];
+                let c: f32 = sound_str.c;
+
+                let lambda: f32 = c * (1.0 / 48000.0) / (1.0 / sound_str.sample_count as f32);
+
+                let new_sample: f32 = (c*c) * (sample_next - (2.0*sample) + sample_prev);
+                sound_str.samples_prev[i] = sample;
+                sound_str.samples_next[i] = new_sample;
+            }
+        }
+        sound_str.samples = sound_str.samples_next.clone();
+    }
+}
+
 pub fn spawn_string(origin: Vec2, length: f32, samples: Vec<f32>, c: f32, string_color: Color, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<ColorMaterial>>) {
     let circle_shape: Handle<Mesh> = meshes.add(Circle::new(10.0));
     let circle_color: Handle<ColorMaterial> = materials.add(Color::srgb_u8(255, 255, 255));
@@ -36,6 +68,7 @@ pub fn spawn_string(origin: Vec2, length: f32, samples: Vec<f32>, c: f32, string
         sample_count,
         samples: samples.clone(),
         samples_prev: samples,
+        samples_next: vec![0.0; sample_count],
         c
     };
 
@@ -66,8 +99,8 @@ pub fn spawn_string(origin: Vec2, length: f32, samples: Vec<f32>, c: f32, string
         let angle: f32 = (y_length / x_coef).atan();
 
         commands.spawn((
-            Mesh2d(meshes.add(Rectangle::new(length, 7.0))),
-            Transform::from_xyz(sound_str.origin.x + (((i as f32) * circle_dist) + circle_dist * 0.5), sound_str.origin.y + ((sample + next_sample) * 0.5), -1.0).with_rotation(Quat::from_rotation_z(angle)),
+            Mesh2d(meshes.add(Rectangle::new(1.0, 7.0))),
+            Transform::from_xyz(sound_str.origin.x + (((i as f32) * circle_dist) + circle_dist * 0.5), sound_str.origin.y + ((sample + next_sample) * 0.5), -1.0).with_rotation(Quat::from_rotation_z(angle)).with_scale(Vec3::new(length, 1.0, 1.0)),
             MeshMaterial2d(line_color.clone()),
             str_entity,
             RectangleEntity
@@ -95,5 +128,6 @@ pub fn draw_strings(query_circles: Query<(&mut Transform, &StringEntity), With<C
 
         rect_transform.translation.y = sound_str.origin.y + ((sample + next) * 0.5);
         rect_transform.rotation = Quat::from_rotation_z(angle);
+        rect_transform.scale.x = (x_length*x_length + y_length*y_length).sqrt();
     }
 }

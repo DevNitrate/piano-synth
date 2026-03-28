@@ -1,28 +1,62 @@
-use bevy::{DefaultPlugins, app::{App, Startup, Update}, asset::{Assets}, camera::{Camera2d, ClearColor}, color::Color, ecs::{system::{Commands, ResMut}}, math::Vec2, mesh::Mesh, sprite_render::ColorMaterial};
+use bevy::{DefaultPlugins, app::{App, PluginGroup, Startup, Update}, camera::{Camera2d, ClearColor}, color::{Color}, ecs::{resource::Resource, schedule::IntoScheduleConfigs, system::{Commands, Query, Res, ResMut}}, gizmos::config::GizmoConfigStore, input::{ButtonInput, keyboard::KeyCode}, math::Vec2, text::TextFont, ui::{Node, PositionType, px, widget::Text}, window::{MonitorSelection, Window, WindowMode, WindowPlugin}};
 
-use crate::sound_string::{draw_strings, spawn_string};
+use crate::karplus::{KarplusString, draw_karplus, impulse_karplus, update_karplus};
 
-mod sound_string;
+mod karplus;
+
+#[derive(Resource)]
+pub struct SimulationState(bool);
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }))
+        //.add_plugins(FpsOverlayPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, draw_strings)
+        .add_systems(Update, update_karplus)
+        .add_systems(Update, (draw_karplus.after(update_karplus), toggle_sim, impulse_karplus))
         .insert_resource(ClearColor(Color::srgb_u8(13, 13, 18)))
         .run();
 }
 
-fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<ColorMaterial>>) {
+fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
     commands.spawn(Camera2d);
+    commands.insert_resource(SimulationState(false));
 
-    let mut samples: Vec<f32> = Vec::new();
+    commands.spawn((
+            Text::new("simulation: off"),
+            TextFont {
+                font_size: 35.0,
+                ..Default::default()
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(15),
+                left: px(15),
+                ..Default::default()
+            }
+    ));
 
-    for i in 0..25 {
-        let sample: f32 = (i as f32 / 2.5).sin() * 100.0;
-
-        samples.push(sample);
+    for (_, conf, _) in config_store.iter_mut() {
+        conf.line.width = 5.0;
     }
     
-    spawn_string(Vec2::new(-800.0, 0.0), 1600.0, samples, 100.0, Color::srgb_u8(181, 61, 61), &mut commands, &mut meshes, &mut materials);    
+    let karplus_string: KarplusString = KarplusString::new(440, 0.96, Vec2::new(-700.0, 0.0), 1400.0, 200.0);
+    commands.spawn(karplus_string);
+}
+
+fn toggle_sim(keys: Res<ButtonInput<KeyCode>>, mut sim_state: ResMut<SimulationState>, mut sim_text: Query<&mut Text>) {
+    if keys.just_pressed(KeyCode::KeyS) {
+        sim_state.0 = !sim_state.0;
+        let state_text: &str = if sim_state.0 {"on"} else {"off"};
+
+        for mut txt in sim_text.iter_mut() {
+            txt.0 = format!("simulation: {}", state_text);
+        }
+    }
 }

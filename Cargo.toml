@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.18.1", default-features = false, features = ["2d"] }
+bevy = { version = "0.18.1", default-features = false, features = ["2d", "bevy_dev_tools", "experimental_bevy_ui_widgets"] }
+rand = "0.10.0"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
