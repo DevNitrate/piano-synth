@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 bevy = { version = "0.18.1", default-features = false, features = ["2d", "bevy_dev_tools", "experimental_bevy_ui_widgets"] }
+dynwave = "0.2.0"
 rand = "0.10.0"
 
 # Enable a small amount of optimization in the dev profile.

@@ -1,4 +1,5 @@
-use bevy::{color::Color, ecs::{component::Component, system::{Query, Res}}, gizmos::gizmos::Gizmos, input::{ButtonInput, keyboard::KeyCode}, math::Vec2};
+use bevy::{color::Color, ecs::{component::Component, system::{NonSendMut, Query, Res}}, gizmos::gizmos::Gizmos, input::{ButtonInput, keyboard::KeyCode}, math::Vec2};
+use dynwave::AudioPlayer;
 
 use crate::SimulationState;
 
@@ -41,12 +42,14 @@ impl KarplusString {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> f32 {
         let next_idx: usize = (self.head + 1) % self.len;
-        self.buffer[self.head] = (0.5 * (self.buffer[self.head] + self.buffer[next_idx])) * self.decay;
-        
+        let new_sample: f32 = (0.5 * (self.buffer[self.head] + self.buffer[next_idx])) * self.decay;
+        self.buffer[self.head] = new_sample;
         self.vertices[self.head].y = (self.buffer[self.head] * self.scaling) + self.origin.y;
         self.head = next_idx;
+
+        new_sample
     }
 
     fn impulse(&mut self) {
@@ -63,15 +66,18 @@ pub fn draw_karplus(mut gizmos: Gizmos, mut karplus_strings: Query<&mut KarplusS
     }
 }
 
-pub fn update_karplus(mut karplus_strings: Query<&mut KarplusString>, sim_state: Res<SimulationState>) {
+pub fn update_karplus(mut karplus_strings: Query<&mut KarplusString>, sim_state: Res<SimulationState>, mut audio_player: NonSendMut<AudioPlayer<f32>>) {
     if !sim_state.0 {
         return;
     }
 
     for mut karplus_string in karplus_strings.iter_mut() {
-        for _ in 0..800 {
-            karplus_string.step();
+        let mut queue: [f32; 800] = [0.0; 800];
+        for i in 0..800 {
+            queue[i] = karplus_string.step();
         }
+
+        audio_player.queue(&queue);
     }
 }
 

@@ -1,4 +1,5 @@
-use bevy::{DefaultPlugins, app::{App, PluginGroup, Startup, Update}, camera::{Camera2d, ClearColor}, color::{Color}, ecs::{resource::Resource, schedule::IntoScheduleConfigs, system::{Commands, Query, Res, ResMut}}, gizmos::config::GizmoConfigStore, input::{ButtonInput, keyboard::KeyCode}, math::Vec2, text::TextFont, ui::{Node, PositionType, px, widget::Text}, window::{MonitorSelection, Window, WindowMode, WindowPlugin}};
+use bevy::{DefaultPlugins, app::{App, PluginGroup, Startup, Update}, camera::{Camera2d, ClearColor}, color::Color, ecs::{resource::Resource, schedule::IntoScheduleConfigs, system::{Commands, NonSendMut, Query, Res, ResMut}, world::World}, gizmos::config::GizmoConfigStore, input::{ButtonInput, keyboard::KeyCode}, math::Vec2, text::TextFont, ui::{Node, PositionType, px, widget::Text}, window::{MonitorSelection, Window, WindowMode, WindowPlugin}};
+use dynwave::{AudioPlayer, BufferSize};
 
 use crate::karplus::{KarplusString, draw_karplus, impulse_karplus, update_karplus};
 
@@ -18,6 +19,7 @@ fn main() {
         }))
         //.add_plugins(FpsOverlayPlugin::default())
         .add_systems(Startup, setup)
+        .add_systems(Startup, setup_audio)
         .add_systems(Update, update_karplus)
         .add_systems(Update, (draw_karplus.after(update_karplus), toggle_sim, impulse_karplus))
         .insert_resource(ClearColor(Color::srgb_u8(13, 13, 18)))
@@ -46,11 +48,21 @@ fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
         conf.line.width = 5.0;
     }
     
-    let karplus_string: KarplusString = KarplusString::new(440, 0.96, Vec2::new(-700.0, 0.0), 1400.0, 200.0);
+    let karplus_string: KarplusString = KarplusString::new(440, 0.995, Vec2::new(-700.0, 0.0), 1400.0, 200.0);
     commands.spawn(karplus_string);
 }
 
-fn toggle_sim(keys: Res<ButtonInput<KeyCode>>, mut sim_state: ResMut<SimulationState>, mut sim_text: Query<&mut Text>) {
+fn setup_audio(world: &mut World) {
+    world.insert_non_send_resource(
+        AudioPlayer::<f32>::new(48000, BufferSize::Samples(800)).unwrap()
+    );
+}
+
+fn debug_audio(a: Option<NonSendMut<AudioPlayer<f32>>>) {
+    println!("{}", a.is_some());
+}
+
+fn toggle_sim(keys: Res<ButtonInput<KeyCode>>, mut sim_state: ResMut<SimulationState>, mut sim_text: Query<&mut Text>, audio_player: NonSendMut<AudioPlayer<f32>>) {
     if keys.just_pressed(KeyCode::KeyS) {
         sim_state.0 = !sim_state.0;
         let state_text: &str = if sim_state.0 {"on"} else {"off"};
@@ -58,5 +70,7 @@ fn toggle_sim(keys: Res<ButtonInput<KeyCode>>, mut sim_state: ResMut<SimulationS
         for mut txt in sim_text.iter_mut() {
             txt.0 = format!("simulation: {}", state_text);
         }
+
+        audio_player.play().unwrap();
     }
 }
