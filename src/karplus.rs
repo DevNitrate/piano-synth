@@ -1,7 +1,7 @@
 use bevy::{color::Color, ecs::{component::Component, system::{NonSendMut, Query, Res}}, gizmos::gizmos::Gizmos, input::{ButtonInput, keyboard::KeyCode}, math::Vec2};
 use dynwave::AudioPlayer;
 
-use crate::SimulationState;
+use crate::{SimulationState};
 
 #[derive(Component)]
 pub struct KarplusString {
@@ -21,7 +21,8 @@ impl KarplusString {
         let len: usize = 48000 / frequency;
         let mut buffer: Vec<f32> = Vec::new();
         let mut vertices: Vec<Vec2> = Vec::new();
-        let head: usize = 0;
+        let head: usize = rand::random_range(0..(len as f32 * 0.2) as usize);
+        println!("head: {}", head);
 
         let spacing: f32 = width / (len-1) as f32;
 
@@ -53,9 +54,19 @@ impl KarplusString {
     }
 
     fn impulse(&mut self) {
+        let strike_start: usize = (0.1 * self.len as f32) as usize;
+        let strike_width: usize = (0.1 * self.len as f32) as usize;
+
         for i in 0..self.len {
-            self.buffer[i] = rand::random_range(-1.0..1.0);
-            self.vertices[i].y = (self.buffer[i] * self.scaling) + self.origin.y;
+            if i >= strike_start && i < (strike_start + strike_width) {
+                let t = (i - strike_start) as f32 / strike_width as f32;
+
+                self.buffer[i] = ((1.0 - t) + (t*0.5)) * rand::random_range(0.8..1.0);
+                self.vertices[i].y = (self.buffer[i] * self.scaling) + self.origin.y;
+            } else {
+                self.buffer[i] = 0.0;
+                self.vertices[i].y = self.origin.y;
+            } 
         }
     }
 }
@@ -68,17 +79,26 @@ pub fn draw_karplus(mut gizmos: Gizmos, mut karplus_strings: Query<&mut KarplusS
 
 pub fn update_karplus(mut karplus_strings: Query<&mut KarplusString>, sim_state: Res<SimulationState>, mut audio_player: NonSendMut<AudioPlayer<f32>>) {
     if !sim_state.0 {
+        audio_player.queue(&vec![0.0; 1600]);
         return;
     }
+    
+    let mut queue: [f32; 1600] = [0.0; 1600];
 
     for mut karplus_string in karplus_strings.iter_mut() {
-        let mut queue: [f32; 800] = [0.0; 800];
-        for i in 0..800 {
-            queue[i] = karplus_string.step();
-        }
 
-        audio_player.queue(&queue);
+        for i in 0..800 {
+            let sample: f32 = karplus_string.step();
+            queue[i*2] += sample;
+            queue[i*2+1] += sample;
+        }
     }
+
+    for el in queue.iter_mut() {
+        *el /= karplus_strings.iter().len() as f32;
+    }
+
+    audio_player.queue(&queue);
 }
 
 pub fn impulse_karplus(keys: Res<ButtonInput<KeyCode>>, mut karplus_strings: Query<&mut KarplusString>) {
